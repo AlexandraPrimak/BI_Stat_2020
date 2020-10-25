@@ -1,0 +1,341 @@
+---
+title: "Project report"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 3 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(warn=-1) # to prevent visualizing warnings in the report
+ifelse("tidyr" %in% rownames(installed.packages()), NA, install.packages("tidyr"))
+ifelse("dplyr" %in% rownames(installed.packages()), NA, install.packages("dplyr"))
+ifelse("ggplot2" %in% rownames(installed.packages()), NA, install.packages("ggplot2"))
+ifelse("psych" %in% rownames(installed.packages()), NA, install.packages("psych"))
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(psych)
+```
+
+## Task 1: 
+**Let's join our data into one large dataset**
+
+To run this code locally, pass correct path to your Data folder in the join_all_csv_from_folder function.
+
+```{r joining}
+join_all_csv_from_folder <- function(path) {
+  files <- list.files(path = path, pattern = "*.csv", full.names = T) 
+  myfiles = lapply(files, read.csv)
+  return(do.call(rbind, myfiles))
+}
+
+full_dataset <- join_all_csv_from_folder("/Users/alexandraprimak/Desktop/Data")
+
+#Lets look how many rows are in our joint dataset
+str(full_dataset)
+```
+
+
+## Task 2: 
+**EDA** 
+
+### Data preprocessing
+
+While drawing some graphics, I noticed that there are some strings values inside number columns (e.g. "I forgot to measure the value").
+
+Let's change all string type values to NA. And then change all NA in column to the column's mean. It will help us to replace missing values without changing the main statistics.
+
+Sex... variable contains NA. We can't change these NAs to any value, so we will remove such rows (later).
+
+```{r preprocessing}
+
+which(is.na(full_dataset$Sex)) # in 343 row of Sex variable there is NA. I'll remove it later
+
+str(full_dataset)
+# All columns except first three ones are numeric. They contains integers or NA. 
+# First three columns can contain string values. If it is, we should remove them. After this i'll turn Length variable to numeric type and Rings and Sex variables to factor type.
+
+# Let's look at values in Sex variable
+unique(full_dataset$Sex) # There are string values: 'three',  'one', 'male'. And there is also only one NA. We need to turn them to good values.
+unique(full_dataset$Rings) # There is a string 'nine' among values. We need to turn them to good values.
+unique(full_dataset$Length) # There is one "No data! I forgot to mesure it!(" value. 
+# Let's turn the column to a numeric type, then this value will become NA. It suits us.
+# The output of unique(is.na(full_dataset$Rings)) is FALSE, i.e. Rings variable doesn't have missing values
+
+# Let's define a function for variables Sex and Rings and then preprocess our data:
+replace_sex_strings <- function(x) ifelse(x == "one", 1 , ifelse(x == "three", 3, ifelse(x == "male", 1, x)))
+replace_rings_strings <- function(x) ifelse(x == "nine", 9 , x)
+
+# Fuction to replace NA by a mean of the variable
+replacer_na_by_mean <- function(x) ifelse(is.na(x), mean(x, na.rm = TRUE), x)
+
+# dplyr preprocessing:
+full_dataset_preprocessed <- full_dataset %>% 
+  rename(Sex = Sex..1...male..2...female..3...uvenil.) %>%                   # Let's rename Sex column:
+  filter(!is.na(Sex)) %>%                                                    # Let's remove NA values from Sex. I'll simply remove this observation as it is only one and such operation willn't strongly change our analysis
+  mutate_at(c('Sex'), replace_sex_strings) %>%                               # Let's replace string values in Sex variable
+  mutate_at(c('Rings'), replace_rings_strings) %>%                           # Let's replace string values in Rings variable
+  mutate_at(c('Sex'), as.factor) %>%                                # Let's factorize two first columns
+  mutate(Sex = recode_factor(Sex, "1" = "male", "2" = "female", "3" = "unevil")) %>%   # Let's replace 1 2 3 values in Sex calue by words
+  mutate_at(vars(!contains("Sex")), as.numeric) %>%      # Let's turn all not factor columns to numeric type. Not integer values (e.g. "No data! I forgot to mesure it!(") will turn to NA.
+  mutate_at(vars(!contains("Sex")), replacer_na_by_mean) # Let's replace all  NA in other columns by mean of the column
+
+# Let's visualize that first two columns have factor type, the third one - numeric
+str(full_dataset_preprocessed)
+# There is no NA in all columns
+apply(full_dataset_preprocessed, 2, function(x) any(is.na(x)))
+
+```
+
+There are also other ways to replace NA, but I used the simplest one.
+
+### Visualize outliers 
+Let's visualize outliers with boxplots:
+```{r visualizing outliers }
+boxplot_Rings <- ggplot(gather(subset(full_dataset_preprocessed, select = c("Rings"))), aes(x = value, y = key)) +
+  geom_boxplot() +
+  ylab(NULL) +
+  labs(title = 'Outliers of Rings variable') + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+boxplot_Weights <- ggplot(gather(subset(full_dataset_preprocessed, select = c("Whole_weight", "Shucked_weight", "Viscera_weight", "Shell_weight"))), aes(x = value, y = key)) +
+  geom_boxplot() +
+  ylab(NULL) +
+  labs(title = 'Outliers of Weight variables') + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+boxplot_Geom_Parameters <- ggplot(gather(subset(full_dataset_preprocessed, select = c("Length", "Diameter", "Height"))), aes(x = value, y = key)) +
+  geom_boxplot() +
+  ylab(NULL) +
+  labs(title = 'Outliers of Length, Diameter and Height variables') + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+boxplot_Rings
+boxplot_Weights
+boxplot_Geom_Parameters
+```
+The results show that all variables have outliers.
+
+### Interconnections between variables and hypothesis
+Let's primary visualize the interconnections between different variables
+```{r}
+
+scatter_plot_all_data <- plot(full_dataset_preprocessed, col = factor(full_dataset_preprocessed$Sex))
+
+```
+
+### Hypothesis
+To make hypotheses we will plot some graphs:
+1. First hypothesis:
+The bigger the length the heavier the mollusks.
+```{r Hypothesis}
+scatter_plot_Whole_weight_Length_Sex <- ggplot(full_dataset_preprocessed, aes(x = Length, y = Whole_weight)) +
+  geom_point(aes(col = Sex)) +
+  labs(title = 'Dependance of whole weight on Length') + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_smooth()
+
+scatter_plot_Whole_weight_Length_Sex
+
+```
+2.Second hypothesis:
+Linear parameters such as Length and Height correlate positively.
+```{r}
+scatter_plot_Height_Length_Sex_Rings <- ggplot(full_dataset_preprocessed, aes(x = Length, y = Height)) +
+  geom_point(aes(col = Rings, shape = Sex)) +
+  scale_y_continuous(limits = c(0, 0.3)) +
+  labs(title = 'Correlation between Length and Height') + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_smooth()
+
+scatter_plot_Height_Length_Sex_Rings
+```
+
+3. Third hypothesis:
+The number of rings doesn't differ statistically significantly in male and female groups.
+```{r}
+boxplot_plot_Sex_Rings <- ggplot(full_dataset_preprocessed, aes(x = Sex, y = Rings)) +
+  geom_boxplot() +
+  labs(title = 'Number of rings of three sex groups') + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+boxplot_plot_Sex_Rings
+```
+4. Forth hypothesis:
+The whole weight doesn't differ statistically significantly in male and female groups.
+```{r}
+boxplot_plot_Sex_Wholeweight <- ggplot(full_dataset_preprocessed, aes(x = Sex, y = Whole_weight)) +
+  geom_boxplot() +
+  labs(title = 'Whole weight of three sex groups') + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+boxplot_plot_Sex_Wholeweight
+```
+5. Fifth hypothesis:
+The diameter doesn't differ statistically significantly in male and female groups.
+```{r}
+boxplot_plot_Sex_Diameter <- ggplot(full_dataset_preprocessed, aes(x = Sex, y = Diameter)) +
+  geom_boxplot() +
+  labs(title = 'Diameter of three sex groups') + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+boxplot_plot_Sex_Diameter
+```
+
+
+## Task 3: 
+**Mean and sd of Lenght variable by sex groups**
+
+```{r mean and sd of Lenght variable}
+full_dataset_preprocessed %>%
+  select(Sex, Length) %>%
+  group_by(Sex) %>%
+  summarise(mean_Length = mean(Length, na.rm = T), sd_Length = sd(Length, na.rm = T), .groups = 'keep')
+```
+
+## Task 4: 
+**% of mollusks with height <= 0.165**
+
+To solve this task we will find the number of values (using length function) of Height variable which are less than 0.165 (using which function):
+
+```{r percent_of_mollusk}
+
+percent_of_mollusk <- length(which(full_dataset_preprocessed$Height <= 0.165)) / length(full_dataset_preprocessed$Height) * 100 
+percent_of_mollusk
+```
+
+## Task 5: 
+**Length value greater than 92% of the ones all observations have:**
+
+To solve this task we will sort the dataframe by "Length" column and slice the first rows (their total length is 92% of total row number). The next one will be wanted:
+
+```{r Length value greater than 92%}
+
+full_dataset_preprocessed_arranged <- arrange(full_dataset_preprocessed, Length)
+first_index <- length(full_dataset_preprocessed_arranged$Length) * 0.92
+first_index
+full_dataset_preprocessed_arranged[ceiling(first_index), "Length"]
+
+```
+
+
+## Task 6: 
+**Let's standartize the variable Length (new variable Lenght_z_scores)**
+```{r task 6}
+Lenght_z_scores <- scale(full_dataset_preprocessed$Length)
+mean(Lenght_z_scores)
+sd(Lenght_z_scores)
+
+```
+
+
+## Task 7:
+**Let's compare molusks with the number of rings of 5 and 15**
+```{r}
+filtered_data <- full_dataset_preprocessed %>% 
+  select(Rings, Diameter, Sex) %>% 
+  filter(Rings == 5 | Rings == 15) %>% 
+  mutate_at(c('Rings'), as.factor)
+
+filtered_data %>% 
+  group_by(Rings) %>% 
+  summarise(Mean_Diameter = mean(Diameter), sd_Diameter = sd(Diameter), .groups = 'keep')
+filtered_data %>% 
+  group_by(Rings, Sex) %>% 
+  summarise(Mean_Diameter = mean(Diameter), sd_Diameter = sd(Diameter), .groups = 'keep')
+```
+
+Let's plot a boxplot:
+```{r}
+ggplot(filtered_data, aes(x = Rings, y = Diameter)) +
+  geom_boxplot() +
+  labs(title = 'Dependance of Diameter on Rings number') + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The graph shows us that the mean Diameters of the groups Rings=5 and Rings=15 are statistically different because the mean of the first group is not in the confidence interval of the secong group.
+
+## Task 8:
+**Notes about Diametr and Whole_weight**
+Due to common conciderations the bigger Diameter the bigger Whole_weight as weight of something positively depends on size and density. If the density is constant, then the bigger the size (i.e. diametr) is the heavier object is. To check this assumption we can estimate the correlation coefficient between the two variables. To decide which test to use we will check the normality os the variables distribution (using Shapiro-Wilk test). 
+To simplify these operations we will write a function **smart_cor** which will return the Pearson coefficient if the dictribution of both variables is normal and Spearman coefficient if at least one variable has abnormal distribution:
+
+```{r}
+smart_cor <- function(x){
+  t1 <- shapiro.test(x[, 1])
+  t2 <- shapiro.test(x[, 2])
+  
+  isNormal <- t1$p.value > 0.05 & t2$p.value > 0.05;
+  
+  result <- c()
+  
+  result$value <- ifelse(
+    isNormal,
+    corr.test(x[1], x[2])$r, 
+    corr.test(x[1], x[2], method = "spearman")$r
+  )
+  
+  result$description <- ifelse(
+    isNormal,
+    paste('Normal distribution, Pearson correlation coefficient', result$value),
+    paste('Abnormal distribution, Sperman correlation coefficient', result$value)
+  )
+  
+  return(result)
+}
+
+cor <- smart_cor(full_dataset_preprocessed %>% select('Diameter', 'Whole_weight'))
+cor$description
+
+```
+
+The correlation coefficient shows that Diameter variable is statistically significant positively correlated whith Whole_weight variable.
+
+Let's visualize it with plot:
+
+```{r}
+full_dataset_preprocessed %>%   
+  ggplot(aes(x = Diameter, y = Whole_weight)) +
+  geom_point(aes(col = Sex)) +
+  geom_smooth() +
+  labs(title = 'Correlation between Diameter and Whole weight') + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+full_dataset_preprocessed %>% 
+  mutate(sqrt_W = sqrt(Whole_weight)) %>% 
+  ggplot(aes(x = Diameter, y = sqrt_W)) +
+  geom_point(aes(col = Sex)) +
+  geom_smooth() +
+  labs(title = 'Correlation between Diameter and sqrt(Whole weight)') + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+As the plots show Diameter and Whole_weight correlate in non linear mode and also not quadratic mode.
+## Task 9:
+**Additional task**
+Let's check the hypothesis:
+1. The mean number of rings are equal in male and female groups.
+2. The mean number of rings are equal in unevil and female groups.
+
+Shapiro-Wilk test (checking for normality):
+```{r}
+male <- full_dataset_preprocessed %>% filter(Sex == 'male')
+shapiro.test(male$Rings)
+female <- full_dataset_preprocessed %>% filter(Sex == 'female')
+shapiro.test(female$Rings)
+unevil <- full_dataset_preprocessed %>% filter(Sex == 'unevil')
+shapiro.test(unevil$Rings)
+```
+Let's plot a boxplot;
+```{r}
+boxplot_plot_Sex_Rings <- ggplot(full_dataset_preprocessed, aes(x = Sex, y = Rings)) +
+  geom_boxplot() +
+  labs(title = 'Number of rings of three sex groups') + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+boxplot_plot_Sex_Rings
+```
+It shows that the mean of each group lies in the confidence interaval of each other group. That is why we can't decline our hypothesis. 
+
