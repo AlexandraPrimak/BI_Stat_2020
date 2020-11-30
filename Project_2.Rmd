@@ -1,0 +1,245 @@
+---
+title: "Project_2"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 3 
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(warn=-1) # to prevent visualizing warnings in the report
+ifelse("MASS" %in% rownames(installed.packages()), NA, install.packages("MASS"))
+ifelse("dplyr" %in% rownames(installed.packages()), NA, install.packages("dplyr"))
+ifelse("ggplot2" %in% rownames(installed.packages()), NA, install.packages("ggplot2"))
+ifelse("car" %in% rownames(installed.packages()), NA, install.packages("car"))
+library(MASS)
+library(dplyr)
+library(ggplot2)
+library(car)
+```
+-
+```{r packages, include=FALSE}
+theme_set(theme_bw())
+```
+
+# Task 1. Linear model with predictor standartization without including interactions of predictions
+```{r preview}
+data(Boston)
+data <- Boston
+my_data <- data
+```
+
+**Preview of our data**
+```{r}
+str(my_data)
+plot(my_data)
+```
+
+There are 14 variables in our data:
+1. crim - the number of crimes per capita
+2. zn - the share of land for residential development
+3. indus - the share of non-retail acres per city
+4. chas - indicator variable (1 if the road crosses the Charles River, 0 if it does not)
+5. nox - concentration of nitrogen oxides (particles / 10 million)
+6. rm - the average number of rooms in a house
+7. age - the share of residential inhabited buildings built before 1940
+8. dis - the weighted average distance to five Boston employment centers
+9. rad - index of availability of radial highways
+10. tax - full property tax rate for every $ 10,000
+11. ptratio - student/teacher ratio in the city 
+12. black -1000(Bk-0.63)^2, where Bk is the proportion of blacks in the city 
+13. lstat - the percent of the population of no status 
+14. medv - median value of houses (* 1000 $)
+
+As there are only two values of chas variable (namely, 0 and 1) we convert it to a factor type
+
+```{r chas to factor}
+unique(my_data$chas)
+my_data$chas <- as.factor(my_data$chas)
+```
+
+As variable rad has only eight integer values we will convert it to a factor type
+Firstly, we will define a function to convert values of factor variable to factor with levels in range (0,8)
+
+```{r}
+unique(my_data$rad)
+str(my_data$rad)
+
+mapRadFn <- function(x) {
+  if (x == 1) return(0)
+  if (x == 2) return(1)
+  if (x == 3) return(2)
+  if (x == 4) return(3)
+  if (x == 5) return(4)
+  if (x == 6) return(5)
+  if (x == 7) return(6)
+  if (x == 8) return(7)
+  if (x == 24) return(8)
+}
+
+my_data$rad <- lapply(my_data$rad, mapRadFn)
+my_data <- my_data %>%
+  mutate_at('rad', as.integer)
+
+my_data <- my_data %>%
+    mutate_at('rad', as.factor)
+
+str(my_data$rad)
+```
+
+## Standartization
+Firstly, we will standartize the numeric variables:
+
+```{r linear model}
+my_data <- my_data %>%
+  mutate_at(vars(-c('chas', 'rad')), scale)
+str(my_data)
+my_lin_model <- lm(medv ~ ., my_data)
+summary(my_lin_model)
+
+```
+
+As we can see p-value of the F-statistics of the entire linear model is below 0,05, so our entire model is significant.
+The adjusted R-squared is 0.7396, so the entire linear model describes Boston data at 73,96 percent level.
+
+**Significant variables:**
+There are some variables that have high p-value, so they are not significant (their coefficients )
+
+So, the **equation of the linear model** excluding non significant variables is (which have p-value (> |t|) > 0,05):
+
+medv = - 0.102 * crim + 0.139 * zn + 0.274 * chas1 - 0.221 * nox + 0.28 * rm - 0.356 * dis + 0.509 * rad2 +  0.28 * rad3 + 0.317 * rad4 + 0.53 * rad6 + 0.526 * rad7 + 0.811 * rad8 - 0.16 * tax - 0.229 * ptratio + 0.093 * black - 0.411 * lstat
+
+At the first step of analysis we will diagnose the entire model even without excluding non significant variables.
+
+# Task 2. Diagnostic of the linear model
+
+When doing the diagnostics of linear model smbd has to check the applicability conditions for linear models:
+
+1. linearity of the relationship (= no pattern in the residuals)
+
+2. lack of influential observations
+
+3. independence of observation
+
+4. normal distribution
+
+5. constancy of variance (= no heteroscedasticity)
+
+6. lack of collinearity of predictors
+
+To make the diagnose of the model we will use the fortify function to get all needed statistics of residues.
+
+```{r fortify}
+my_lin_model_diag <- fortify(my_lin_model)
+head(my_lin_model_diag)
+```
+
+## Task 2.a Linearity of the relationship and Task 2.г сonstancy of variance:
+
+```{r Linearity of the relationship}
+gg_resid <- ggplot(data = my_lin_model_diag, aes(x = .fitted, y = .stdresid)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0)+
+  geom_hline(yintercept = 2, color = "red") +
+  geom_hline(yintercept = -2, color = "red") + 
+  geom_smooth() +
+  geom_smooth(method = 'lm', color = "red")
+gg_resid 
+```
+
+As we can see some of the residues are out of 2sd threshold and there is also en obvious nonlinear pattern. 
+There is also obvious heteroscedasticity of the residues distribution. 
+So, these tests are failed
+
+## Task 2.б Lack of influential observations:
+
+```{r}
+ggplot(my_lin_model_diag, aes(x = 1:nrow(my_lin_model_diag), y = .cooksd)) + 
+  geom_bar(stat = "identity") + 
+  geom_hline(yintercept = 1, color = "red")
+```
+
+As we can see at the Cook's distance diagram none of the values exceed 1 threshold.
+So there are no influential observations. So, this test is passed.
+
+## Task 2.г Normal distribution:
+
+```{r}
+qqplot_my_lin_model_diag <- qqPlot(my_lin_model_diag$.fitted)
+```
+
+As we can see there are some deviations from the normal distribution of residues 
+on the ends of the graph, but they are not drastic
+
+## 6.1 Lack of collinearity of predictors:
+
+```{r}
+my_data_for_cor <- my_data[-which(names(my_data) %in% c("chas", "rad"))]
+cor(my_data_for_cor)
+```
+
+As we can see some predictors have collinearity.
+
+More precisely we will check the important condition of non multicollinearity of predictors in our model with the VIF parameter. We will remove step by step the predictors which have the greatest VIF (and VIF > 2).
+
+```{r}
+vif(my_lin_model)
+
+my_lin_model_1 <- update(my_lin_model, .~. - rad) 
+vif(my_lin_model_1)
+
+my_lin_model_2 <- update(my_lin_model_1, .~. - dis) 
+vif(my_lin_model_2)
+
+my_lin_model_3 <- update(my_lin_model_2, .~. - nox) 
+vif(my_lin_model_3)
+
+my_lin_model_4 <- update(my_lin_model_3, .~. - indus) 
+vif(my_lin_model_4)
+
+my_lin_model_5 <- update(my_lin_model_4, .~. - lstat) 
+vif(my_lin_model_5)
+
+my_lin_model_6 <- update(my_lin_model_5, .~. - tax) 
+vif(my_lin_model_6)  # in this model there is no multicollinearity
+```
+
+The output **linear model** of this step is:
+```{r}
+summary(my_lin_model_6)
+```
+
+**medv = -0.026 - 0.101 * crim -0.008 * zn + 0.383 * chas1 + 0.54 * rm - 0.127 * age - 0.218 * ptratio + 0.149 * black**
+The adjusted R-squared is  0.63, F-statistic is 124.8 with p-value < 2.2e-16, so the current model is significant.
+
+The intercept and the zn variable are insignificant (p-value > 0,05).
+
+# Task 3. Plot cost predictions against a variable that has the largest modulo coefficient.
+
+At this step the most influential variable is rm so we will plot a graph of the dependance of medv on rm:
+there were a mistake, I do not how to solve it
+```{r predict}
+# MyData <- data.frame(
+#   rm = seq(min(my_data$rm), max(my_data$rm), length.out = 100),
+#   crim = mean(my_data$crim),
+#   zn = mean(my_data$zn),
+#   age = mean(my_data$age),
+#   ptratio = mean(my_data$ptratio),
+#   black = mean(my_data$black))
+# 
+# # Predicted values
+# Predictions <- predict(my_lin_model_6, newdata = MyData,  interval = 'confidence')
+# MyData <- data.frame(MyData, Predictions)
+# 
+# # График предсказаний модели
+# Pl_predict <- ggplot(MyData, aes(x = rm, y = fit)) +
+#   geom_ribbon(alpha = 0.2, aes(ymin = lwr, ymax = upr)) +
+#   geom_line() + 
+#   ggtitle("Multiple model")
+# Pl_predict 
+
+```
+
+
