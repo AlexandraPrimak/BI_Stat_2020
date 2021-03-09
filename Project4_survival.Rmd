@@ -1,0 +1,166 @@
+---
+title: "Project4_survival"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+options(warn=-1) # to prevent visualizing warnings in the report
+ifelse("survival" %in% rownames(installed.packages()), NA, install.packages("survival"))
+ifelse("survminer" %in% rownames(installed.packages()), NA, install.packages("survminer"))
+ifelse("ranger" %in% rownames(installed.packages()), NA, install.packages("ranger"))
+ifelse("ggplot2" %in% rownames(installed.packages()), NA, install.packages("ggplot2"))
+ifelse("dplyr" %in% rownames(installed.packages()), NA, install.packages("dplyr"))
+ifelse("ggfortify" %in% rownames(installed.packages()), NA, install.packages("ggfortify"))
+ifelse("coin" %in% rownames(installed.packages()), NA, install.packages("coin"))
+
+# ifelse("car" %in% rownames(installed.packages()), NA, install.packages("car"))
+```
+
+```{r libraries, include=FALSE}
+library(survival)
+library(survminer)
+library(ranger)
+library(ggplot2)
+library(dplyr)
+library(ggfortify)
+library(coin)
+```
+
+## 1) EDA
+There are 6 variables in the dataset:
+1) futime:	survival or censoring time
+2) fustat:	censoring status (have people survived or not)
+3) age:	in years
+4) resid.ds:	residual disease present (1=no,2=yes)
+5) rx:	treatment group
+6) ecog.ps:	ECOG performance status (1 is better, see reference). The ECOG Scale of Performance Status describes a patient’s level of functioning in terms of their ability to care for themself, daily activity, and physical ability (walking, working, etc.) (from 0	- Fully active to 5 - Dead).
+
+```{r descr}
+ovarian
+str(ovarian)
+plot(ovarian)
+```
+
+All the variables are of numeric type. There are no NAs then.
+
+```{r bp1}
+bp1 <- ggplot(ovarian, aes(x=age)) +
+  geom_histogram()
+bp1
+
+mean(ovarian$age)
+median(ovarian$age)
+```
+
+Lets preprocess our dataset and create some factor variables.
+As there are no obvious visible groups we will split all patients in 2 groups by age: 
+less than 60 (mature people) and more than 60 years old (old people). These groups we will save in new "AG" variable. Also we factorize "resid.ds" and "rx" variable.
+
+```{r ovar}
+ovar <- mutate(ovarian, AG = ifelse((age < 60), "Less then 60", "More then60"),
+               AG = factor(AG),
+               resid.ds = factor(resid.ds,labels=c("residual desease present","residual desease not present")),
+               rx = factor(rx,labels=c("first tr group","second tr group")))
+```
+
+The boxplot below shows that there is statistically significant difference in time before answer between two age groups. When patients are younger than 60 years, the time is bigger.
+
+```{r}
+bp2<-ggplot(ovar, aes(x=AG, y=futime, fill=rx)) +
+  geom_boxplot()
+bp2
+```
+
+As it is shown at the boxplot below there is statistically significant difference in time before answer between two age groups. When patients are younger than 60 years, the time is bigger.
+
+```{r}
+bp3<-ggplot(ovar, aes(x=AG, y=futime, fill=resid.ds)) +
+  geom_boxplot()
+bp3
+```
+
+
+## 2) Kaplan-Meier curves (5 баллов)
+
+Lets perform Kaplan-Meier curves analysys:
+
+```{r}
+km_fit <- survfit(Surv(futime, fustat) ~ 1, data=ovarian)
+summary(km_fit, times = c(1,30,60,90*(1:10)))
+
+autoplot(km_fit)
+```
+
+1)Lets have a look how rx (treatment group) variable change the curves:
+
+```{r}
+km_rx_fit <- survfit(Surv(futime, fustat) ~ rx, data=ovarian)
+autoplot(km_rx_fit)
+```
+
+2)Lets have a look how resid.ds(residual disease present: 1=no,2=yes) variable change the curves:
+
+```{r}
+km_rx_fit <- survfit(Surv(futime, fustat) ~ rx, data=ovarian)
+autoplot(km_rx_fit)
+```
+
+3)Lets have a look how age group change the curves. There is more obvious difference between the curves:
+
+```{r}
+km_AG_fit <- survfit(Surv(futime, fustat) ~ AG, data=ovar)
+autoplot(km_AG_fit)
+```
+
+
+4)Lets have a look how the curves differ for 4 groups splitted by variables "AG" and "rx". We can see that the group "More then 60" with "Second tr" differ from other groups with more short survaval time.
+
+```{r}
+ovar_two_factors_rx <- ovar
+ovar_two_factors_rx$hyb_fact <- paste(ovar_two_factors_rx$AG, ovar_two_factors_rx$rx)
+km_AG_fit_rx <- survfit(Surv(futime, fustat) ~ hyb_fact, data=ovar_two_factors_rx)
+autoplot(km_AG_fit_rx)
+```
+
+### 3) Groups that differ in survival (5 баллов)
+
+For age group "AG" p-valueis equal to 0.002903, then thease group are different.
+```{r}
+logrank_test(Surv(futime, fustat) ~ AG, data = ovar)
+```
+
+For resid.ds p-valueis equal to 0.05444, then thease group are almost different.
+```{r}
+logrank_test(Surv(futime, fustat) ~ resid.ds, data = ovar)
+```
+
+For 4 groups splitted by AG + rx the p-value is also < 0.05.
+```{r}
+ovar_two_factors_rx$hyb_fact <- as.factor(ovar_two_factors_rx$hyb_fact)
+
+logrank_test(Surv(futime, fustat) ~ hyb_fact, data = ovar_two_factors_rx)
+```
+
+### 4) Estimations of factors that affect the risk and risk ratio (7 баллов)
+
+Factors that affect the risk analysys:
+
+```{r estimates}
+cox <- coxph(Surv(futime, fustat) ~ ecog.ps + rx + age + resid.ds , data = ovar)
+summary(cox)
+
+cox_fit <- survfit(cox)
+autoplot(cox_fit)
+
+aa_fit <- aareg(Surv(futime, fustat) ~ ecog.ps + rx + age + resid.ds, data = ovar)
+autoplot(aa_fit)
+```
+
+Risks ratio:
+
+```{r 1}
+fit.coxph <- coxph(Surv(futime, fustat) ~ ecog.ps + rx + age + resid.ds, data = ovar)
+ggforest(fit.coxph, data = ovar)
+```
+
