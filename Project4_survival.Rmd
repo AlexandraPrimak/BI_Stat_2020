@@ -128,7 +128,7 @@ For age groups "AG" p-value is equal to 0.002903, then these groups are differen
 logrank_test(Surv(futime, fustat) ~ AG, data = ovar)
 ```
 
-For resid.ds p-valueis equal to 0.05444, then these group are almost different.
+For resid.ds p-value is equal to 0.05444, then these groups are almost different.
 ```{r}
 logrank_test(Surv(futime, fustat) ~ resid.ds, data = ovar)
 ```
