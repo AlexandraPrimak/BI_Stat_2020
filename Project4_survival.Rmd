@@ -13,8 +13,6 @@ ifelse("ggplot2" %in% rownames(installed.packages()), NA, install.packages("ggpl
 ifelse("dplyr" %in% rownames(installed.packages()), NA, install.packages("dplyr"))
 ifelse("ggfortify" %in% rownames(installed.packages()), NA, install.packages("ggfortify"))
 ifelse("coin" %in% rownames(installed.packages()), NA, install.packages("coin"))
-
-# ifelse("car" %in% rownames(installed.packages()), NA, install.packages("car"))
 ```
 
 ```{r libraries, include=FALSE}
