@@ -112,7 +112,7 @@ autoplot(km_AG_fit)
 ```
 
 
-4)Lets have a look how the curves differ for 4 groups splitted by variables "AG" and "rx". We can see that the group "More then 60" with "Second tr" differ from other groups with more short survaval time.
+4)Lets have a look how the curves differ for 4 groups splitted by variables "AG" and "rx". We can see that the group "More then 60" with "Second tr" differs from other groups with more short survival time.
 
 ```{r}
 ovar_two_factors_rx <- ovar
