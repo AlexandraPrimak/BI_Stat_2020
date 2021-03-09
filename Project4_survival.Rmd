@@ -79,7 +79,7 @@ bp3
 ```
 
 
-## 2) Kaplan-Meier curves (5 баллов)
+## 2) Kaplan-Meier curves
 
 Lets perform Kaplan-Meier curves analysys:
 
@@ -121,7 +121,7 @@ km_AG_fit_rx <- survfit(Surv(futime, fustat) ~ hyb_fact, data=ovar_two_factors_r
 autoplot(km_AG_fit_rx)
 ```
 
-### 3) Groups that differ in survival (5 баллов)
+### 3) Groups that differ in survival
 
 For age group "AG" p-valueis equal to 0.002903, then thease group are different.
 ```{r}
@@ -140,7 +140,7 @@ ovar_two_factors_rx$hyb_fact <- as.factor(ovar_two_factors_rx$hyb_fact)
 logrank_test(Surv(futime, fustat) ~ hyb_fact, data = ovar_two_factors_rx)
 ```
 
-### 4) Estimations of factors that affect the risk and risk ratio (7 баллов)
+### 4) Estimations of factors that affect the risk and risk ratio
 
 Factors that affect the risk analysys:
 
