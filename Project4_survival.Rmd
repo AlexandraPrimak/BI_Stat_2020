@@ -123,12 +123,12 @@ autoplot(km_AG_fit_rx)
 
 ### 3) Groups that differ in survival
 
-For age group "AG" p-valueis equal to 0.002903, then thease group are different.
+For age groups "AG" p-value is equal to 0.002903, then these groups are different.
 ```{r}
 logrank_test(Surv(futime, fustat) ~ AG, data = ovar)
 ```
 
-For resid.ds p-valueis equal to 0.05444, then thease group are almost different.
+For resid.ds p-valueis equal to 0.05444, then these group are almost different.
 ```{r}
 logrank_test(Surv(futime, fustat) ~ resid.ds, data = ovar)
 ```
