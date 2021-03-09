@@ -90,21 +90,21 @@ summary(km_fit, times = c(1,30,60,90*(1:10)))
 autoplot(km_fit)
 ```
 
-1)Lets have a look how rx (treatment group) variable change the curves:
+1)Lets have a look how rx (treatment group) variable changes the curves:
 
 ```{r}
 km_rx_fit <- survfit(Surv(futime, fustat) ~ rx, data=ovarian)
 autoplot(km_rx_fit)
 ```
 
-2)Lets have a look how resid.ds(residual disease present: 1=no,2=yes) variable change the curves:
+2)Lets have a look how resid.ds(residual disease present: 1=no,2=yes) variable changes the curves:
 
 ```{r}
 km_rx_fit <- survfit(Surv(futime, fustat) ~ rx, data=ovarian)
 autoplot(km_rx_fit)
 ```
 
-3)Lets have a look how age group change the curves. There is more obvious difference between the curves:
+3)Lets have a look how age group changes the curves. There is more obvious difference between the curves:
 
 ```{r}
 km_AG_fit <- survfit(Surv(futime, fustat) ~ AG, data=ovar)
