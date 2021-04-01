@@ -1,0 +1,227 @@
+---
+title: "Project_mouse_AL"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+options(warn=-1) # to prevent visualizing warnings in the report
+ifelse("readxl" %in% rownames(installed.packages()), NA, install.packages("readxl"))
+ifelse("dplyr" %in% rownames(installed.packages()), NA, install.packages("dplyr"))
+ifelse("data.table" %in% rownames(installed.packages()), NA, install.packages("data.table"))
+ifelse("stats" %in% rownames(installed.packages()), NA, install.packages("stats"))
+ifelse("multcomp" %in% rownames(installed.packages()), NA, install.packages("multcomp"))
+ifelse("factoextra" %in% rownames(installed.packages()), NA, install.packages("factoextra"))
+ifelse("ggplot2" %in% rownames(installed.packages()), NA, install.packages("ggplot2"))
+ifelse("car" %in% rownames(installed.packages()), NA, install.packages("car"))
+```
+
+## 
+
+```{r libraries, include=FALSE}
+
+library(readxl)
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(stats)
+library(multcomp)
+library(factoextra)
+library(car)
+```
+
+## 
+
+
+
+```{r message=FALSE}
+data_url <- "https://archive.ics.uci.edu/ml/machine-learning-databases/00342/Data_Cortex_Nuclear.xls"
+local_name <- "Data_Cortex_Nuclear.xls"
+download.file(data_url, local_name)
+data <- read_excel(local_name, sheet = 1) %>% as.data.table()
+```
+
+## Task 1. Data description
+### 1) Total observations
+
+```{r descr}
+nrow(data)
+```
+
+### 2) Groups
+We can group the data by 3 variables: Genotype, Behavior, Treatment.
+There is a factor variable class that perform such splitting
+
+```{r Groups}
+unique(data$class)
+```
+
+### 3) Balancing
+To find out whether our data is balanced we will look at the amount of observations in each group.
+
+```{r balancing}
+data %>% 
+  group_by(class) %>%
+  summarise(nrows = length(class))
+```
+
+Group sizes are of the same order then we consider them approximately balanced.
+
+### 4) Missing values
+Then we found out how many entire observations are in our data.
+
+```{r Missing values}
+
+nrow(na.omit(data))
+```
+
+## Task 2. Differencies in BDNF_N expression among classes:
+
+```{r Differencies in BDNF_N, message=FALSE}
+
+ggplot(data, aes(x=class, y=BDNF_N, fill=class)) + 
+  geom_boxplot()
+
+data$class <- as.factor(data$class)
+model <- aov(BDNF_N ~ class, data)
+summary(glht(model, linfct = mcp(class = "Tukey")))
+```
+
+The analysis shows that there is statistically significant difference in  BDNF_N expression between some groups, e.g.: c-SC-m and c-CS-m  (P < 0,05) etc.
+
+## Task 3. Linear model for prediction of ERBB4_N expression level based on other proteins data  
+-- diagnosis of the linear model
+-- explanation of it's worth/worseness
+
+Firstly, we will standartize the numeric variables:
+
+```{r linear model}
+
+data_copy <- data %>%
+  mutate_at(vars(c(2:78)), scale)
+
+proteins_data <- data_copy[, -c(1, 79:82)]
+my_lin_model <- lm(ERBB4_N ~ ., proteins_data)
+summary(my_lin_model)
+```
+
+As we can see, p-value of the F-statistics of the entire linear model is below 0,05, so our entire model is seems to be significant.
+The adjusted R-squared is 0.8427, so the entire linear model describes the data at 84,27 percent level.
+But before the following steps we will notice, that when there are so many independent variables it is no matter how good the statistics are because the greater number of independent variables the more apparent precise model. 
+
+When doing the diagnostics of linear model smbd has to check the applicability conditions. We will test the linearity of the relationship (= no pattern in the residuals), normal distribution, constancy of variance (= no heteroscedasticity).
+
+To make the diagnose of the model we will use the fortify function to get all needed statistics of residues.
+
+```{r fortify}
+my_lin_model_diag <- fortify(my_lin_model)
+head(my_lin_model_diag)
+```
+
+Linearity of the relationship and сonstancy of variance:
+
+```{r Linearity of the relationship}
+gg_resid <- ggplot(data = my_lin_model_diag, aes(x = .fitted, y = .stdresid)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0)+
+  geom_hline(yintercept = 2, color = "red") +
+  geom_hline(yintercept = -2, color = "red") + 
+  geom_smooth() +
+  geom_smooth(method = 'lm', color = "red")
+gg_resid 
+```
+
+As we can see some of the residues are out of 2sd threshold and there is no an obvious nonlinear pattern. 
+There is no obvious heteroscedasticity of the residues distribution. 
+So, these tests are passed
+
+Normal distribution:
+
+```{r}
+qqplot_my_lin_model_diag <- qqPlot(my_lin_model_diag$.fitted)
+qqplot_my_lin_model_diag
+```
+
+As we can see there are some deviations from the normal distribution of residues 
+on the ends of the graph, but they are not drastic.
+
+## Task 4. PCA
+
+Lets peerform PCA analysys. Exclude factor columns, leave only valuable columns.
+
+```{r}
+data_copy <- data %>%
+  mutate_at(vars(c(2:78)), scale) %>% 
+  na.omit()
+
+proteins_data <- data_copy[, -c(1, 79:82)]
+pca <- prcomp(proteins_data, scale = TRUE)
+
+```
+
+### 1) Ordination
+
+```{r}
+fviz_pca_ind(pca,
+             axes = c(1,2),
+             geom.ind = "point",
+             col.ind = data_copy$class, # color by groups
+             palette = "Dark2",
+             addEllipses = TRUE, # Concentration ellipses
+             legend.title = "Class"
+)
+```
+
+
+### 2) Factor loadings
+
+```{r}
+fviz_pca_var(pca, palette = "Dark2")
+```
+
+### 3) Component's impact
+Overall components impact distribution (first 10 components):
+
+```{r}
+fviz_eig(pca, addlabels = TRUE)
+```
+
+Lets look what variables first 3 components are mainly depends on:
+
+```{r}
+fviz_contrib(pca, choice = "var", axes = 1, top = 10)
+fviz_contrib(pca, choice = "var", axes = 2, top = 10)
+fviz_contrib(pca, choice = "var", axes = 3, top = 10)
+```
+
+
+### 4) Distribution in 3 first Main Components 
+As there were some problems with pca3d library, lets plot 3 2dimensional plots in differend planes for our analysys. 
+
+```{r}
+fviz_pca_ind(pca,
+             axes = c(1,2),
+             geom.ind = "point",
+             col.ind = data_copy$class, # color by groups
+             palette = "Dark2",
+             addEllipses = TRUE, # Concentration ellipses
+             legend.title = "Class"
+)
+fviz_pca_ind(pca,
+             axes = c(2,3),
+             geom.ind = "point",
+             col.ind = data_copy$class, # color by groups
+             palette = "Dark2",
+             addEllipses = TRUE, # Concentration ellipses
+             legend.title = "Class"
+)
+fviz_pca_ind(pca,
+             axes = c(3,1),
+             geom.ind = "point",
+             col.ind = data_copy$class, # color by groups
+             palette = "Dark2",
+             addEllipses = TRUE, # Concentration ellipses
+             legend.title = "Class"
+)
+```
+
