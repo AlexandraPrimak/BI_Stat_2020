@@ -1,0 +1,108 @@
+---
+title: "Project5_additional"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+options(warn=-1) # to prevent visualizing warnings in the report
+ifelse("ggplot2" %in% rownames(installed.packages()), NA, install.packages("ggplot2"))
+ifelse("dplyr" %in% rownames(installed.packages()), NA, install.packages("dplyr"))
+ifelse("car" %in% rownames(installed.packages()), NA, install.packages("car"))
+```
+
+```{r libraries, include=FALSE}
+library(ggplot2)
+library(dplyr)
+library(car)
+```
+
+## 1) EDA
+
+
+```{r descr}
+df <- read.csv('https://stats.idre.ucla.edu/stat/data/binary.csv')
+str(df)
+plot(df)
+```
+
+All the variables are of numeric type. There are no NAs then.
+
+```{r bp1}
+bp1 <- ggplot(df, aes(x=rank)) +
+  geom_histogram()
+bp1
+
+mean(df$gpa)
+median(df$gre)
+```
+
+
+## 2) Build a model
+
+Lets build a simple model.
+
+```{r}
+train = df[1:300,]
+test = df[301:400,]
+
+mod <- glm(admit ~ ., family = binomial(link = 'logit'), data = train)
+Anova(mod)
+
+drop1(mod, test = "Chi")
+
+
+mod1 <- update(mod, .~.-gpa)
+drop1(mod1, test = "Chi")
+
+mod2 <- update(mod1, .~.-rank)
+drop1(mod2, test = "Chi")
+
+mod3 <- update(mod2, .~.-gre)
+drop1(mod3, test = "Chi")
+AIC(mod, mod1, mod2, mod3)      
+```
+
+We can see, that AIC increases. So we tooks the model from all three depended variables.
+
+```{r}
+mod9_diag <- data.frame(.fitted = fitted(mod, type = 'response'),
+                        .resid_p = resid(mod, type = 'pearson'))
+
+ggplot(mod9_diag, aes(y = .resid_p, x = .fitted)) + 
+  geom_point() +
+  theme_bw() +
+  geom_hline(yintercept = 0) +  
+  geom_smooth(method = 'loess')
+```
+
+
+## 4) Predictions.
+
+
+```{r}
+X <- model.matrix(~ gpa + rank + gre, data =  test)
+b <- coef(mod)
+
+test$fit_eta <- X %*% b
+test$se_eta <- sqrt(diag(X %*% vcov(mod) %*% t(X)))
+
+
+logit_back <- function(x) exp(x)/(1 + exp(x))
+
+test$fit_pi <- logit_back(test$fit_eta)
+
+test$lwr_pi <- logit_back(test$fit_eta - 2 * test$se_eta)
+test$upr_pi <- logit_back(test$fit_eta + 2 * test$se_eta)
+
+head(test, 2)
+
+test$rank <- as.factor(test$rank)
+
+ggplot(test, aes(x = gpa, y = fit_eta, fill = rank))  + 
+  geom_line(aes(color = rank)) +
+  geom_ribbon(aes(ymin = fit_eta - 2 * se_eta, ymax = fit_eta + 2 * se_eta), alpha = 0.5)+
+  theme_bw()
+
+```
+
